@@ -16,13 +16,29 @@ float movex = 0;
 
 const int levelwidth = 20;
 const int levelheight = 20;
-const int levelfloors = 3;
+const int noOfFloors = 3;
+float elevation = 1;
 
-double narrow(double x, double y)
+double getyPosOfPillar(double heightOfPillar, double elevation, int upperorlower) //0 = upper, 1 = lower
+{
+	if (upperorlower == 0)
+	{
+		return ((screenHeight / 2) - (heightOfPillar) / 2) - ((heightOfPillar)*(elevation - 1));
+	}
+	if (upperorlower == 1)
+	{
+		return ((screenHeight / 2) + (heightOfPillar) / 2) - ((heightOfPillar)*(elevation - 1));
+	}
+
+}
+
+double narrow(double x, double y, double z)
 {
 	//x = x * (2000 / sqrt((y*y)+(x*x)));
 
 	//x = x * (200000 / ((y*y) + (x*x)));
+
+	//y = -sqrt((y*y) + (z*z)); //turn y into "distance" incorporating the z value too 
 
 	x = x * -(2000 / y);
 
@@ -45,10 +61,10 @@ double distancetolength(double distance)
 	return distance;
 }
 
-double xytodistance(double x, double y)
+double xytodistance(double x, double y, double z)
 {
 
-	//double distance = sqrt(x*x+y*y);
+	//double distance = sqrt((x*x+y*y));
 
 	double distance = y;
 
@@ -63,20 +79,22 @@ double arrayPosToCoord(double arraypos, double screenwidth, int arraywidth)
 
 }
 
-int coordToarrayPos(double coord, double screenwidth, int arraywidth)
+int coordToarrayPos(double coord, double screenwidth, float arraywidth)
 {
 
 	int arraypos = coord / (screenwidth / arraywidth);
-	
 	return arraypos;
 
 }
 
-double calculatePillarCoords(int height, int width, double angle, int switcher)
+double calculatePillarCoords(int height, int width, float elevation, double angle, int switcher)
 {
 
 	double x = arrayPosToCoord(height, screenWidth, levelwidth);
 	double y = arrayPosToCoord(width, screenHeight, levelheight);
+	//double z = arrayPosToCoord(elevation, screenHeight, noOfFloors) - arrayPosToCoord(1, screenHeight, noOfFloors); //subtract the value of 1 converted into coords such that the ground level = 0 px in coords. 
+	double z = (elevation - 1) * 100;
+
 
 	x = x - playerx + movex; //shift the map to make the player the origin point
 	y = y - (playery - movey);
@@ -84,9 +102,10 @@ double calculatePillarCoords(int height, int width, double angle, int switcher)
 	double newx = ((x)* cos(angle)) - (y)* sin(angle);
 	double newy = ((y)* cos(angle) + (x)* sin(angle)); //rotate around the mouse position
 
-	double distanceFromPlayer = xytodistance(newx, newy); //calculate the distance between the player located at origin and the point (to create distance scaling of heights)
+	double distanceFromPlayer = xytodistance(newx, newy, z); //calculate the distance between the player located at origin and the point (to create distance scaling of heights)
+	//distanceFromPlayer = sqrt((distanceFromPlayer*distanceFromPlayer) + z*z); //apply the trigonometry to the floor level (ie, if it's on ah igher or lower floor, treat it as further away
 
-	newx = narrow(newx, newy); //artificially narrow x based on its y positioning (to get narrow as it gets furhter away)
+	newx = narrow(newx, newy, z); //artificially narrow x based on its y positioning (to get narrow as it gets furhter away)
 
 	x = newx + playerx;
 	y = newy + (playery); //reset the player away from the origin back to the player's location 
@@ -158,15 +177,21 @@ int main()
 		}
 	
 		sf::Vector2i currentMouse = sf::Mouse::getPosition(window);
-		double angle = -((currentMouse.x - mousePos.x)/10)*(2 * acos(0.0)/180);
+
+		double angle = -((currentMouse.x - mousePos.x) / 10)*(2 * acos(0.0) / 180);
 		double angle2 = -((currentMouse.y - mousePos.y))*(2 * acos(0.0) / 180);
+		elevation = elevation + (angle2 / 100);
 
 
-		if (angle != 0.0)
+		if (angle != -((currentMouse.x - mousePos.x) / 10)*(2 * acos(0.0) / 180))
 		{
 			//window.clear();
 			//printf("%f \n", angle);
+
+			sf::Mouse::setPosition(sf::Vector2i(10, 50));
 		}
+
+
 		window.clear();
 		
 		
@@ -189,13 +214,13 @@ int main()
 				if (level[width-1][height-1] == 1)
 				{
 
-					double x = calculatePillarCoords(height, width, angle, 0);
-					double y = calculatePillarCoords(height, width, angle, 1);
-					double heightOfPillar = calculatePillarCoords(height, width, angle, 2);
+					double x = calculatePillarCoords(height, width, elevation,  angle, 0);
+					double y = calculatePillarCoords(height, width, elevation, angle, 1);
+					double heightOfPillar = calculatePillarCoords(height, width, elevation, angle, 2);
 
 					player.setSize(sf::Vector2f(5.0f, heightOfPillar));
 
-					player.setPosition((float)x, (float)((screenHeight/2)- (heightOfPillar)/2)); //place the vertical pillar in the middle of the screen
+					player.setPosition((float)x, (float)(getyPosOfPillar(heightOfPillar, elevation, 0))); //place the vertical pillar in the middle of the screen
 			
 					currentpillarvisible = 0; //presume it is not visible until it is (this is a global variable)
 
@@ -209,21 +234,21 @@ int main()
 					//time to draw the roof and floor parts.... 
 
 					double currentx = x;
-					double currenty = (screenHeight / 2) - (heightOfPillar / 2);
+					double currenty = getyPosOfPillar(heightOfPillar, elevation, 0);
 					double currentHeight = heightOfPillar; //parameters for the current pillar that has just been drawn
-
+					
 					if (level[width][height - 1] == 1) //if there is one to the right... 
 
 					{
 
-						double x = calculatePillarCoords(height, width+1, angle, 0); //calculate values for the pillar to the right 
-						double y = calculatePillarCoords(height, width+1, angle, 1);
-						double heightOfPillar = calculatePillarCoords(height, width+1, angle, 2);
-						
+						double x = calculatePillarCoords(height, width+1, elevation, angle, 0); //calculate values for the pillar to the right 
+						double y = calculatePillarCoords(height, width+1, elevation, angle, 1);
+						double heightOfPillar = calculatePillarCoords(height, width+1, elevation, angle, 2);
+												
 						sf::Vertex line[] =
 						{
 							sf::Vertex(sf::Vector2f(currentx, currenty)),
-							sf::Vertex(sf::Vector2f(x, (screenHeight / 2) - (heightOfPillar) / 2))
+							sf::Vertex(sf::Vector2f(x,  getyPosOfPillar(heightOfPillar, elevation, 0)))
 						};
 
 						float linelength = x - currentx; //work out how long the convex shape is to prevent super long shapes going across the screen
@@ -234,15 +259,18 @@ int main()
 						convex.setPointCount(4);
 						convex2.setPointCount(4);
 
+						double NewMidy = getyPosOfPillar(heightOfPillar, elevation, 0) + (heightOfPillar / 2);
+						double currentMidy = getyPosOfPillar(currentHeight, elevation, 0) + (currentHeight / 2);
+
 						convex.setPoint(0, sf::Vector2f(currentx, currenty + currentHeight));
-						convex.setPoint(1, sf::Vector2f(x, (screenHeight / 2) + (heightOfPillar) / 2));
-						convex.setPoint(2, sf::Vector2f(x, (screenHeight/2)));
-						convex.setPoint(3, sf::Vector2f(currentx, (screenHeight / 2)));
+						convex.setPoint(1, sf::Vector2f(x, getyPosOfPillar(heightOfPillar, elevation, 1)));
+						convex.setPoint(2, sf::Vector2f(x, NewMidy));
+						convex.setPoint(3, sf::Vector2f(currentx, currentMidy));
 
 						convex2.setPoint(0, sf::Vector2f(currentx, currenty));
-						convex2.setPoint(1, sf::Vector2f(x, (screenHeight / 2) - (heightOfPillar) / 2));
-						convex2.setPoint(2, sf::Vector2f(x, (screenHeight / 2)));
-						convex2.setPoint(3, sf::Vector2f(currentx, (screenHeight / 2)));		
+						convex2.setPoint(1, sf::Vector2f(x, getyPosOfPillar(heightOfPillar, elevation, 0)));
+						convex2.setPoint(2, sf::Vector2f(x, NewMidy));
+						convex2.setPoint(3, sf::Vector2f(currentx, currentMidy));
 
 						if (currentpillarvisible == 1)
 						{
@@ -263,9 +291,9 @@ int main()
 					if (level[width-1][height] == 1) //if there is one below... 
 					{
 
-						double x = calculatePillarCoords(height+1, width, angle, 0); //calculate values for the pillar to the right 
-						double y = calculatePillarCoords(height+1, width, angle, 1);
-						double heightOfPillar = calculatePillarCoords(height+1, width, angle, 2);
+						double x = calculatePillarCoords(height+1, width, 1, angle, 0); //calculate values for the pillar to the right 
+						double y = calculatePillarCoords(height+1, width, 1, angle, 1);
+						double heightOfPillar = calculatePillarCoords(height+1, width, 1, angle, 2);
 
 						float linelength = x - currentx; //work out how long the convex shape is to prevent super long shapes going across the screen
 
@@ -275,15 +303,19 @@ int main()
 						convex.setPointCount(4);
 						convex2.setPointCount(4);
 
+						double NewMidy = getyPosOfPillar(heightOfPillar, elevation, 0) + (heightOfPillar / 2);
+						double currentMidy = getyPosOfPillar(currentHeight, elevation, 0) + (currentHeight / 2);
+
+
 						convex.setPoint(0, sf::Vector2f(currentx, currenty + currentHeight));
-						convex.setPoint(1, sf::Vector2f(x, (screenHeight / 2) + (heightOfPillar) / 2));
-						convex.setPoint(2, sf::Vector2f(x, (screenHeight / 2)));
-						convex.setPoint(3, sf::Vector2f(currentx, (screenHeight / 2)));
+						convex.setPoint(1, sf::Vector2f(x, getyPosOfPillar(heightOfPillar, elevation, 1)));
+						convex.setPoint(2, sf::Vector2f(x, NewMidy));
+						convex.setPoint(3, sf::Vector2f(currentx, NewMidy));
 
 						convex2.setPoint(0, sf::Vector2f(currentx, currenty));
-						convex2.setPoint(1, sf::Vector2f(x, (screenHeight / 2) - (heightOfPillar) / 2));
-						convex2.setPoint(2, sf::Vector2f(x, (screenHeight / 2)));
-						convex2.setPoint(3, sf::Vector2f(currentx, (screenHeight / 2)));
+						convex2.setPoint(1, sf::Vector2f(x, getyPosOfPillar(heightOfPillar, elevation, 0)));
+						convex2.setPoint(2, sf::Vector2f(x, NewMidy));
+						convex2.setPoint(3, sf::Vector2f(currentx, NewMidy));
 
 						if (playery > (y) || currentpillarvisible == 1)
 
